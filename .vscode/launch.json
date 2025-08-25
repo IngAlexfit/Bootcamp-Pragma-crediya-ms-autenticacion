@@ -1,0 +1,14 @@
+{
+    "configurations": [
+        {
+            "type": "java",
+            "name": "Spring Boot-MainApplication<app-service>",
+            "request": "launch",
+            "cwd": "${workspaceFolder}",
+            "mainClass": "co.crediya.msautenticacion.MainApplication",
+            "projectName": "app-service",
+            "args": "",
+            "envFile": "${workspaceFolder}/.env"
+        }
+    ]
+}
