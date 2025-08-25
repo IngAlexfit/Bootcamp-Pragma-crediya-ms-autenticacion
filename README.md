@@ -1,47 +1,194 @@
-# Proyecto Base Implementando Clean Architecture
+# Microservicio de AutenticaciÃ³n â€“ CrediYa
 
-## Antes de Iniciar
+Este proyecto implementa un microservicio de autenticaciÃ³n/registro de usuarios basado en Clean Architecture, usando Java 17 y Spring Boot (WebFlux + R2DBC) con PostgreSQL.
 
-Empezaremos por explicar los diferentes componentes del proyectos y partiremos de los componentes externos, continuando con los componentes core de negocio (dominio) y por último el inicio y configuración de la aplicación.
+## Arquitectura y mÃ³dulos
 
-Lee el artículo [Clean Architecture — Aislando los detalles](https://medium.com/bancolombia-tech/clean-architecture-aislando-los-detalles-4f9530f35d7a)
+Clean Architecture separa el dominio del detalle de infraestructura. Los mÃ³dulos Gradle principales son:
 
-# Arquitectura
+- model (domain/model):
+  - Entidades de dominio (por ejemplo, `Usuario`).
+  - Puertos/gateways (por ejemplo, `UsuarioRepository`).
+- usecase (domain/usecase):
+  - Casos de uso de aplicaciÃ³n (por ejemplo, `RegistrarUsuarioUseCase`).
+- reactive-web (infrastructure/entry-points/reactive-web):
+  - Entry point HTTP con Spring WebFlux (Router/Handler).
+  - DTOs y mapeo con MapStruct.
+  - Filtros de CORS y cabeceras de seguridad.
+- r2dbc-postgresql (infrastructure/driven-adapters/r2dbc-postgresql):
+  - Adaptador de persistencia reactiva (R2DBC) a PostgreSQL.
+  - Entidad de datos `UsuarioEntity`, repositorio reactivo y configuraciÃ³n de pool.
+- app-service (applications/app-service):
+  - AplicaciÃ³n Spring Boot que ensambla y levanta el servicio.
 
-![Clean Architecture](https://miro.medium.com/max/1400/1*ZdlHz8B0-qu9Y-QO3AXR_w.png)
+## Stack tÃ©cnico
 
-## Domain
+- Java 17, Gradle 8.x (wrapper incluido)
+- Spring Boot 3.5.4 (WebFlux, Actuator)
+- R2DBC PostgreSQL, Connection Pool
+- Reactor (Mono/Flux)
+- ValidaciÃ³n: Jakarta Validation + Hibernate Validator
+- DTO mapping: MapStruct
+- Observabilidad: Micrometer Prometheus
+- Calidad: JUnit 5, Jacoco, PIT Mutation Testing
 
-Es el módulo más interno de la arquitectura, pertenece a la capa del dominio y encapsula la lógica y reglas del negocio mediante modelos y entidades del dominio.
+## Requisitos
 
-## Usecases
+- JDK 17
+- PostgreSQL 12+
+- (Opcional) Docker 24+
 
-Este módulo gradle perteneciente a la capa del dominio, implementa los casos de uso del sistema, define lógica de aplicación y reacciona a las invocaciones desde el módulo de entry points, orquestando los flujos hacia el módulo de entities.
+## ConfiguraciÃ³n
 
-## Infrastructure
+La configuraciÃ³n principal estÃ¡ en `applications/app-service/src/main/resources/application.yaml`:
 
-### Helpers
+```yaml
+server:
+  port: 8080
+spring:
+  application:
+    name: "CrediYa"
+  devtools:
+    add-properties: false
+  h2:
+    console:
+      enabled: true
+      path: "/h2"
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "health,prometheus"
+  endpoint:
+    health:
+      probes:
+        enabled: true
+adapters:
+  r2dbc:
+    host: "localhost"
+    port: 5432
+    database: "CrediYa-Autenticacion"
+    schema: "public"
+    username: ${DATABASE_USERNAME_CrediYa-Autenticacion:"USERNAME"}
+    password: ${DATABASE_PASSWORD_CrediYa-Autenticacion:"PASSWORD"}
+cors:
+  allowed-origins: "http://localhost:4200,http://localhost:8080"
+logging:
+  level:
+    root: INFO
+  file:
+    name: logs/crediya.log
+```
 
-En el apartado de helpers tendremos utilidades generales para los Driven Adapters y Entry Points.
+- ConexiÃ³n R2DBC: se mapea a `PostgresqlConnectionProperties` con prefijo `adapters.r2dbc`.
+- CORS: configurable mediante `cors.allowed-origins`.
+- Actuator: expone `/actuator/health` y `/actuator/prometheus`.
 
-Estas utilidades no están arraigadas a objetos concretos, se realiza el uso de generics para modelar comportamientos
-genéricos de los diferentes objetos de persistencia que puedan existir, este tipo de implementaciones se realizan
-basadas en el patrón de diseño [Unit of Work y Repository](https://medium.com/@krzychukosobudzki/repository-design-pattern-bc490b256006)
+## Compilar y ejecutar
 
-Estas clases no puede existir solas y debe heredarse su compartimiento en los **Driven Adapters**
+- Compilar todo el proyecto:
+  - `./gradlew clean build`
+- Ejecutar la app localmente:
+  - `./gradlew :app-service:bootRun`
+- Empaquetar JAR ejecutable:
+  - `./gradlew :app-service:bootJar`
+  - JAR resultante: `build/libs/CrediYa.jar`
+- Ejecutar el JAR:
+  - `java -jar build/libs/CrediYa.jar`
 
-### Driven Adapters
+### Docker (opcional)
 
-Los driven adapter representan implementaciones externas a nuestro sistema, como lo son conexiones a servicios rest,
-soap, bases de datos, lectura de archivos planos, y en concreto cualquier origen y fuente de datos con la que debamos
-interactuar.
+Un Dockerfile estÃ¡ disponible en `deployment/Dockerfile`.
 
-### Entry Points
+Ejemplo:
 
-Los entry points representan los puntos de entrada de la aplicación o el inicio de los flujos de negocio.
+```bash
+docker build -f deployment/Dockerfile -t crediya-auth .
+docker run --rm -p 8080:8080 \
+  -e DATABASE_USERNAME_CrediYa-Autenticacion=USERNAME \
+  -e DATABASE_PASSWORD_CrediYa-Autenticacion=PASSWORD \
+  crediya-auth
+```
 
-## Application
+Nota: Ajusta host/puerto si PostgreSQL corre fuera del contenedor.
 
-Este módulo es el más externo de la arquitectura, es el encargado de ensamblar los distintos módulos, resolver las dependencias y crear los beans de los casos de use (UseCases) de forma automática, inyectando en éstos instancias concretas de las dependencias declaradas. Además inicia la aplicación (es el único módulo del proyecto donde encontraremos la función “public static void main(String[] args)”.
+## Endpoints
 
-**Los beans de los casos de uso se disponibilizan automaticamente gracias a un '@ComponentScan' ubicado en esta capa.**
+### Registrar usuario
+
+- MÃ©todo: POST
+- URL: `/api/v1/usuarios`
+- Content-Type: `application/json`
+
+Body (DTO `UsuarioRequest`):
+
+```json
+{
+  "nombre": "Juan",
+  "apellido": "PÃ©rez",
+  "fechaNacimiento": "1990-01-15T00:00:00Z",
+  "telefono": "+57-3000000000",
+  "email": "juan.perez@example.com",
+  "salarioBase": 1200000
+}
+```
+
+Respuestas:
+
+- 200 OK: `UsuarioResponse` con los datos creados y `userId`.
+- 400 Bad Request: `{ "error": "mensaje de error" }` por validaciÃ³n o si el email ya estÃ¡ registrado.
+
+Ejemplo con curl:
+
+```bash
+curl -X POST http://localhost:8080/api/v1/usuarios \
+  -H "Content-Type: application/json" \
+  -d '{
+    "nombre": "Ana",
+    "apellido": "GÃ³mez",
+    "fechaNacimiento": "1995-05-20T00:00:00Z",
+    "telefono": "+57-3111111111",
+    "email": "ana.gomez@example.com",
+    "salarioBase": 2500000
+  }'
+```
+
+## Comportamiento clave
+
+- Validaciones (Jakarta Validation) en `UsuarioRequest`:
+  - Campos obligatorios, formato de email y rango de `salarioBase`.
+- Reglas de negocio (use case `RegistrarUsuarioUseCase`):
+  - Verifica que el email no exista antes de guardar.
+- Persistencia (R2DBC):
+  - `UsuarioRepositoryAdapter` mapea entre modelo de dominio y `UsuarioEntity`.
+- Seguridad y CORS:
+  - Filtro de cabeceras de seguridad (`SecurityHeadersConfig`).
+  - CORS configurable; mÃ©todos permitidos GET/POST.
+
+## Pruebas y calidad
+
+- Ejecutar pruebas: `./gradlew test`
+- Reporte de cobertura Jacoco consolidado: `./gradlew jacocoMergedReport`
+  - Salida: `build/reports/jacocoHtml/index.html` y `build/reports/jacoco.xml`
+- MutaciÃ³n (PIT) agregada: `./gradlew pitestReportAggregate`
+  - Reporte: `build/reports/pitest/mutations.xml` y HTML por submÃ³dulo
+
+## Estructura (resumen)
+
+```
+applications/
+  app-service/
+    src/main/resources/application.yaml
+domain/
+  model/ (entidades y gateways)
+  usecase/ (casos de uso)
+infrastructure/
+  entry-points/reactive-web/ (Router, Handler, DTOs, CORS, headers)
+  driven-adapters/r2dbc-postgresql/ (config R2DBC, entity, repos, adapter)
+```
+
+## Notas
+
+- Java 17 es requerido (configurado en `main.gradle`).
+- El repositorio reactivo expone `findByEmail` y el use case impide duplicados por email.
+- Ajusta `adapters.r2dbc.*` para apuntar a tu base PostgreSQL.
