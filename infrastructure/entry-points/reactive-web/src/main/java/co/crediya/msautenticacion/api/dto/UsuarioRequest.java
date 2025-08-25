@@ -3,7 +3,7 @@ package co.crediya.msautenticacion.api.dto;
 import lombok.Data;
 
 import java.math.BigDecimal;
-import java.sql.Timestamp;
+import java.time.LocalDate;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -26,7 +26,7 @@ public class UsuarioRequest {
     private String apellido;
 
     @NotNull(message = "La fecha de nacimiento es obligatoria")
-    private Timestamp fechaNacimiento;
+    private LocalDate fechaNacimiento;
 
     @NotBlank(message = "El teléfono es obligatorio")
     private String telefono;

@@ -7,7 +7,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.math.BigDecimal;
-import java.sql.Timestamp;
+import java.time.LocalDate;
 import java.util.UUID;
 
 /**
@@ -24,7 +24,7 @@ public class Usuario {
     private UUID userId;
     private String nombre;
     private String apellido;
-    private Timestamp fechaNacimiento;
+    private LocalDate fechaNacimiento;
     private String telefono;
     private String email;
     private BigDecimal salarioBase;
