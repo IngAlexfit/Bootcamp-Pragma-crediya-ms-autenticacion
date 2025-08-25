@@ -15,11 +15,18 @@ management:
   endpoints:
     web:
       exposure:
-        include: "health,prometheus"
+        include: "health,prometheus,openapi,swagger-ui"
   endpoint:
     health:
       probes:
         enabled: true
+springdoc:
+  api-docs:
+    enabled: true
+    path: /v3/api-docs
+  swagger-ui:
+    enabled: true
+    path: /swagger-ui.html
 adapters:
   r2dbc:
     host: "localhost"
