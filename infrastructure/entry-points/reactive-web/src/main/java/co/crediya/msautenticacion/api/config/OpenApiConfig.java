@@ -21,8 +21,8 @@ public class OpenApiConfig {
     ) {
         return new OpenAPI()
                 .info(new Info()
-                        .title(appName + " Microservicio Autenticacion")
-                        .description("Microservicio De Autenticacion - CrediYa")
+                        .title(appName + " Microservicio Autenticación")
+                        .description("Microservicio De Autenticación - CrediYa")
                         .version("v1")
                         .license(new License().name("Apache 2.0").url("https://www.apache.org/licenses/LICENSE-2.0.html"))
                         .contact(new Contact().name("Equipo CrediYa").email("info@pragma.com.co"))
