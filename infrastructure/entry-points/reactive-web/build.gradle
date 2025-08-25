@@ -9,4 +9,8 @@ dependencies {
     annotationProcessor 'org.mapstruct:mapstruct-processor:1.6.3'
     // OpenAPI/Swagger for Spring WebFlux (Swagger UI at /swagger-ui.html)
     implementation 'org.springdoc:springdoc-openapi-starter-webflux-ui:2.6.0'
+
+    // Test dependencies
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'io.projectreactor:reactor-test'
 }
