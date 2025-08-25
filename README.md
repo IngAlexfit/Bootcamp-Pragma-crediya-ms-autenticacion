@@ -153,6 +153,41 @@ curl -X POST http://localhost:8080/api/v1/usuarios \
   }'
 ```
 
+## Flujo de datos (de Postman a la base de datos)
+
+Diagrama textual del recorrido de la petición:
+
+- Cliente (Postman) -> RouterRest (POST /api/v1/usuarios)
+- RouterRest -> Handler.registrarUsuario
+- Handler -> valida DTO con Jakarta Validator
+- Handler -> mapeo DTO a dominio (Usuario) con UsuarioDTOMapper (MapStruct)
+- Handler -> Use Case (RegistrarUsuarioUseCase.registrar)
+- Use Case -> UsuarioRepository.findByEmail(email) para validar duplicado
+- Use Case -> UsuarioRepository.save(usuario) si no existe
+- Adapter R2DBC (UsuarioRepositoryAdapter) -> mapea Usuario -> UsuarioEntity (ObjectMapper)
+- Adapter -> UsuarioReactiveRepository.save(entity) (Spring Data R2DBC)
+- R2DBC -> PostgreSQL (ConnectionPool + PostgresqlConnectionProperties)
+- Respuesta: entidad guardada -> mapeo a dominio -> mapeo a UsuarioResponse -> 200 OK JSON
+
+Paso a paso:
+
+1) Postman envía POST /api/v1/usuarios con JSON válido.
+2) RouterRest enruta al Handler.
+3) Handler parsea body a UsuarioRequest y valida; si hay violaciones, devuelve 400 con {"error":"..."}.
+4) Si es válido, mapea a modelo de dominio Usuario (MapStruct).
+5) Invoca RegistrarUsuarioUseCase.registrar(usuario).
+6) El caso de uso consulta UsuarioRepository.findByEmail; si existe, emite error IllegalArgumentException y el Handler responde 400.
+7) Si no existe, UsuarioRepository.save(usuario).
+8) El adaptador convierte a UsuarioEntity y persiste vía UsuarioReactiveRepository (R2DBC) usando el pool configurado.
+9) Al guardar, se convierte de vuelta a Usuario, luego a UsuarioResponse y se responde 200 OK.
+
+Notas del flujo:
+
+- Todo el pipeline es reactivo (Mono) y no bloqueante.
+- Transaccionalidad: el guardado está anotado con @Transactional en el adaptador.
+- Config de conexión se toma de `adapters.r2dbc.*` en application.yaml.
+- CORS y cabeceras de seguridad se aplican a todas las respuestas.
+
 ## Comportamiento clave
 
 - Validaciones (Jakarta Validation) en `UsuarioRequest`:
