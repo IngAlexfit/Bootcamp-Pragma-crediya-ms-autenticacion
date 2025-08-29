@@ -1,54 +1,44 @@
 package co.crediya.msautenticacion.r2dbc.entity;
 
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import lombok.*;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.relational.core.mapping.Table;
+import org.springframework.data.relational.core.mapping.Column; // <- usar Spring Data, no JPA
 
-import jakarta.persistence.Column;
-
-import java.util.UUID;
 import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.util.UUID;
 
-/**
- * Clase que representa la entidad Usuario en la base de datos.
- * 
- */
 @Getter
 @Setter
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@Table("usuario") 
+@Table("usuario")
 public class UsuarioEntity {
 
     @Id
-    @Column(name = "user_id")
+    @Column("user_id")
     private UUID userId;
 
-    @Column(name = "nombre")
+    @Column("nombre")
     private String nombre;
 
-    @Column(name = "apellido")
+    @Column("apellido")
     private String apellido;
 
-    @Column(name = "fecha_nacimiento")
-    private String fechaNacimiento;
+    @Column("fecha_nacimiento")
+    private LocalDate fechaNacimiento;
 
-    @Column(name = "email")
+    @Column("email")
     private String email;
 
-    @Column(name = "documento_identidad")
+    @Column("documento_identidad")
     private String documentoIdentidad;
 
-    @Column(name = "telefono")
+    @Column("telefono")
     private String telefono;
 
-    @Column(name = "salario_base")
+    @Column("salario_base")
     private BigDecimal salarioBase;
-
- 
 }

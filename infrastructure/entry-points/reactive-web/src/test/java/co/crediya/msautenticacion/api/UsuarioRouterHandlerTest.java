@@ -1,71 +1,75 @@
 package co.crediya.msautenticacion.api;
 
-import co.crediya.msautenticacion.api.config.GlobalErrorWebExceptionHandler;
 import co.crediya.msautenticacion.api.dto.UsuarioRequest;
 import co.crediya.msautenticacion.api.dto.UsuarioResponse;
 import co.crediya.msautenticacion.api.mapper.UsuarioDTOMapper;
 import co.crediya.msautenticacion.model.usuario.Usuario;
 import co.crediya.msautenticacion.usecase.usuario.registrarusuario.interfaces.IRegistrarUsuarioUseCase;
 import jakarta.validation.ConstraintViolation;
+import jakarta.validation.Path;
 import jakarta.validation.Validator;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInfo; // <- para loguear nombre de la prueba
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.MediaType;
 import org.springframework.http.server.reactive.HttpHandler;
+import org.springframework.test.web.reactive.server.HttpHandlerConnector;
+import org.springframework.test.web.reactive.server.WebTestClient;
 import org.springframework.web.reactive.function.server.RouterFunction;
 import org.springframework.web.reactive.function.server.RouterFunctions;
 import org.springframework.web.reactive.function.server.ServerResponse;
 import org.springframework.web.server.adapter.WebHttpHandlerBuilder;
-import org.springframework.test.web.reactive.server.HttpHandlerConnector;
-import org.springframework.test.web.reactive.server.WebTestClient;
-
 import reactor.core.publisher.Mono;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.util.Collections;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import static org.hamcrest.Matchers.hasSize; 
 
 /**
- * Clase de pruebas para UsuarioRouterHandler.
- * Realiza pruebas unitarias sobre los endpoints de usuario.
- * Utiliza WebTestClient para simular peticiones HTTP y Mockito para mocks.
+ * Pruebas unitarias del Router/Handler de usuarios (WebFlux).
+ *
+ * Cobertura:
+ * - Flujo exitoso de registro (201/200 OK).
+ * - Errores de Bean Validation (una y múltiples violaciones).
+ * - Errores de decodificación del cuerpo (JSON mal formado).
+ * - Errores de binding (tipos/formato de fecha).
+ * - Body vacío.
+ * - Regla de negocio (email duplicado).
+ *
+ * Notas:
+ * - Se usa WebTestClient contra un HttpHandler in-memory.
+ * - Se imprime con System.out para traza rápida durante la ejecución de tests.
  */
 @ExtendWith(MockitoExtension.class)
 class UsuarioRouterHandlerTest {
-    /**
-     * Cliente de pruebas para realizar peticiones HTTP.
-     */
-    private WebTestClient webTestClient;
 
-    /**
-     * Caso de uso para registrar usuario (mock).
-     */
+    private WebTestClient webTestClient;
     private IRegistrarUsuarioUseCase registrarUsuarioUseCase;
-    /**
-     * Validador de datos (mock).
-     */
     private Validator validator;
-    /**
-     * Mapper de DTO de usuario (mock).
-     */
     private UsuarioDTOMapper usuarioDTOMapper;
+
+    private static void tlog(String msg) {
+        System.out.println("[TEST] " + msg);
+    }
 
     /**
      * Construye un objeto UsuarioRequest de prueba.
+     * 
      * @return UsuarioRequest con datos de ejemplo
      */
     private UsuarioRequest buildRequest() {
-        System.out.println("Ejecutando buildRequest()");
         UsuarioRequest req = new UsuarioRequest();
         req.setNombre("Juan");
         req.setApellido("Pérez");
@@ -78,11 +82,11 @@ class UsuarioRouterHandlerTest {
 
     /**
      * Construye un modelo Usuario a partir de un UsuarioRequest.
+     * 
      * @param req UsuarioRequest
      * @return Usuario
      */
     private Usuario buildModelFromReq(UsuarioRequest req) {
-        System.out.println("Ejecutando buildModelFromReq()");
         return Usuario.builder()
                 .userId(null)
                 .nombre(req.getNombre())
@@ -95,11 +99,13 @@ class UsuarioRouterHandlerTest {
     }
 
     /**
-     * Configura los mocks y el WebTestClient antes de cada prueba.
+     * Inicializa WebTestClient y mocks antes de cada prueba.
+     * Además, imprime el nombre de la prueba actual.
      */
     @BeforeEach
-    void setup() {
-        System.out.println("Ejecutando setup()");
+    void setup(TestInfo testInfo) {
+        tlog("Iniciando prueba: " + testInfo.getDisplayName());
+
         registrarUsuarioUseCase = mock(IRegistrarUsuarioUseCase.class);
         validator = mock(Validator.class);
         usuarioDTOMapper = mock(UsuarioDTOMapper.class);
@@ -109,22 +115,20 @@ class UsuarioRouterHandlerTest {
         RouterFunction<ServerResponse> router = routerRest.routerFunction(handler);
 
         var webHandler = RouterFunctions.toWebHandler(router);
-        HttpHandler httpHandler = WebHttpHandlerBuilder.webHandler(webHandler)
-                .exceptionHandler(new GlobalErrorWebExceptionHandler())
-                .build();
+        HttpHandler httpHandler = WebHttpHandlerBuilder.webHandler(webHandler).build();
 
         this.webTestClient = WebTestClient.bindToServer(new HttpHandlerConnector(httpHandler)).build();
     }
 
     /**
-     * Prueba el endpoint POST /api/v1/usuarios para registro exitoso.
+     * Caso exitoso: se registra un usuario correctamente.
      */
     @Test
     @DisplayName("POST /api/v1/usuarios - éxito")
     void registrarUsuario_ok() {
-        System.out.println("Ejecutando registrarUsuario_ok()");
-        // Arrange
         UsuarioRequest req = buildRequest();
+        tlog("Payload OK -> email=" + req.getEmail());
+
         Usuario toSave = buildModelFromReq(req);
         Usuario saved = toSave.toBuilder().userId(UUID.randomUUID()).build();
         UsuarioResponse response = new UsuarioResponse();
@@ -140,7 +144,6 @@ class UsuarioRouterHandlerTest {
         when(registrarUsuarioUseCase.registrar(any(Usuario.class))).thenReturn(Mono.just(saved));
         when(usuarioDTOMapper.toResponse(any(Usuario.class))).thenReturn(response);
 
-        // Act + Assert
         webTestClient.post()
                 .uri("/api/v1/usuarios")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -151,27 +154,68 @@ class UsuarioRouterHandlerTest {
                 .expectBody()
                 .jsonPath("$.userId").isNotEmpty()
                 .jsonPath("$.email").isEqualTo(req.getEmail());
-        System.out.println("FIN registrarUsuario_ok()");
-
     }
 
-     /**
-     * Prueba el endpoint POST /api/v1/usuarios para error de validación.
+    /**
+     * Error de validación con una única violación.
      */
     @Test
-    @DisplayName("POST /api/v1/usuarios - error de validación")
-    void registrarUsuario_validationError() {
-        System.out.println("Ejecutando registrarUsuario_validationError()");
-
+    @DisplayName("POST /api/v1/usuarios - error de validación (1 violación)")
+    void registrarUsuario_validationError_single() {
         @SuppressWarnings("unchecked")
         ConstraintViolation<UsuarioRequest> violation = Mockito.mock(ConstraintViolation.class);
+        Path path = Mockito.mock(Path.class);
+        when(path.toString()).thenReturn("nombre");
+        when(violation.getPropertyPath()).thenReturn(path);
         when(violation.getMessage()).thenReturn("El nombre es obligatorio");
         when(validator.validate(any(UsuarioRequest.class))).thenReturn(Set.of(violation));
-   
+
         UsuarioRequest req = buildRequest();
         req.setNombre("");
+        tlog("Payload inválido (1 violación) -> nombre vacío");
 
-        // Act + Assert
+        webTestClient.post()
+                .uri("/api/v1/usuarios")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(req)
+                .exchange()
+                .expectStatus().isBadRequest()
+                .expectHeader().contentTypeCompatibleWith(MediaType.APPLICATION_JSON)
+                .expectBody()
+                .jsonPath("$.status").isEqualTo(400)
+                .jsonPath("$.error").isEqualTo("Bad Request")
+                .jsonPath("$.message").isEqualTo("Validation failed")
+                .jsonPath("$.errors[0].field").isEqualTo("nombre")
+                .jsonPath("$.errors[0].message").isEqualTo("El nombre es obligatorio");
+    }
+
+    /**
+     * Error de validación con múltiples violaciones.
+     */
+    @Test
+    @DisplayName("POST /api/v1/usuarios - error de validación (múltiples violaciones)")
+    void registrarUsuario_validationError_multiple() {
+        @SuppressWarnings("unchecked")
+        ConstraintViolation<UsuarioRequest> v1 = Mockito.mock(ConstraintViolation.class);
+        Path p1 = Mockito.mock(Path.class);
+        when(p1.toString()).thenReturn("email");
+        when(v1.getPropertyPath()).thenReturn(p1);
+        when(v1.getMessage()).thenReturn("El correo electrónico debe tener un formato válido");
+
+        @SuppressWarnings("unchecked")
+        ConstraintViolation<UsuarioRequest> v2 = Mockito.mock(ConstraintViolation.class);
+        Path p2 = Mockito.mock(Path.class);
+        when(p2.toString()).thenReturn("salarioBase");
+        when(v2.getPropertyPath()).thenReturn(p2);
+        when(v2.getMessage()).thenReturn("El salario base debe ser menor o igual a 15.000.000");
+
+        when(validator.validate(any(UsuarioRequest.class))).thenReturn(Set.of(v1, v2));
+
+        UsuarioRequest req = buildRequest();
+        req.setEmail("invalido");
+        req.setSalarioBase(new BigDecimal("20000000"));
+        tlog("Payload inválido (múltiples violaciones) -> email y salarioBase");
+
         webTestClient.post()
                 .uri("/api/v1/usuarios")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -179,26 +223,65 @@ class UsuarioRouterHandlerTest {
                 .exchange()
                 .expectStatus().isBadRequest()
                 .expectBody()
-                .jsonPath("$.error").isNotEmpty();
-        System.out.println("FIN registrarUsuario_validationError()");
+                .jsonPath("$.errors").value(hasSize(2)) // total
+                .jsonPath("$.errors[?(@.field=='email')]").value(hasSize(1))
+                .jsonPath("$.errors[?(@.field=='salarioBase')]").value(hasSize(1));
+    }
 
+    
+
+    /**
+     * JSON mal formado: debe provocar Bad Request con mensaje de decodificación.
+     */
+    @Test
+    @DisplayName("POST /api/v1/usuarios - JSON mal formado (DecodingException)")
+    void registrarUsuario_invalidJson_decodingError() {
+        String invalidJson = "{ \"nombre\": \"Juan\", "; // truncado -> JSON inválido
+        tlog("Enviando JSON mal formado");
+
+        webTestClient.post()
+                .uri("/api/v1/usuarios")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(invalidJson)
+                .exchange()
+                .expectStatus().isBadRequest()
+                .expectBody()
+                .jsonPath("$.error").value(containsString("No se pudo leer el cuerpo"));
+    }
+
+
+    /**
+     * Cuerpo vacío: debe devolver 400 con mensaje claro.
+     */
+    @Test
+    @DisplayName("POST /api/v1/usuarios - body vacío")
+    void registrarUsuario_emptyBody_error() {
+        tlog("Enviando body vacío");
+
+        webTestClient.post()
+                .uri("/api/v1/usuarios")
+                .contentType(MediaType.APPLICATION_JSON)
+                .exchange()
+                .expectStatus().isBadRequest()
+                .expectBody()
+                .jsonPath("$.error").isEqualTo("El body no puede estar vacío");
     }
 
     /**
-     * Prueba el endpoint POST /api/v1/usuarios cuando el correo ya existe.
+     * Regla de negocio: correo ya registrado.
      */
     @Test
-    @DisplayName("POST /api/v1/usuarios - correo ya existe")
+    @DisplayName("POST /api/v1/usuarios - correo ya existe (regla de negocio)")
     void registrarUsuario_emailExists() {
-        System.out.println("Ejecutando registrarUsuario_emailExists()");
-        // Arrange
         UsuarioRequest req = buildRequest();
         Usuario toSave = buildModelFromReq(req);
         when(usuarioDTOMapper.toModel(any(UsuarioRequest.class))).thenReturn(toSave);
         when(registrarUsuarioUseCase.registrar(any(Usuario.class)))
-                .thenReturn(Mono.error(new IllegalArgumentException("El correo electrónico ya se encuentra registrado.")));
+                .thenReturn(
+                        Mono.error(new IllegalArgumentException("El correo electrónico ya se encuentra registrado.")));
 
-        // Act + Assert
+        tlog("Simulando correo duplicado -> " + req.getEmail());
+
         webTestClient.post()
                 .uri("/api/v1/usuarios")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -207,7 +290,5 @@ class UsuarioRouterHandlerTest {
                 .expectStatus().isBadRequest()
                 .expectBody()
                 .jsonPath("$.error").isEqualTo("El correo electrónico ya se encuentra registrado.");
-        System.out.println("FIN registrarUsuario_emailExists()");
-
     }
 }

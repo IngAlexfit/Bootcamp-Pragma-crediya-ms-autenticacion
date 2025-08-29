@@ -45,6 +45,7 @@ public class UsuarioRepositoryAdapter implements UsuarioRepository {
      * @param email Correo electrónico a buscar
      * @return Mono<Usuario> usuario encontrado o vacío
      */
+    @Transactional
     @Override
     public Mono<Usuario> findByEmail(String email) {
         return repository.findByEmail(email)

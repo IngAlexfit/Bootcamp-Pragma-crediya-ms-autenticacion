@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Archivo de configuración de Logback para aplicaciones Spring Boot (WebFlux).
+  - Define el patrón de logs, appenders y niveles por paquete.
+  - Usa valores del contexto Spring (springProperty) y del MDC (%X{...}).
+-->
+<configuration>
+
+    <!--
+      Lee el nombre de la app desde spring.application.name para usarlo en el patrón.
+      defaultValue se usa si la propiedad no está definida.
+    -->
+    <springProperty scope="context" name="APP_NAME" source="spring.application.name" defaultValue="ms-autenticacion"/>
+
+    <!--
+      Patrón de log (LOG_PATTERN):
+      %d{yyyy-MM-dd HH:mm:ss.SSS}  -> fecha/hora con milisegundos
+      %-5level                    -> nivel alineado a 5 caracteres (INFO, WARN, ...)
+      [%thread]                   -> nombre del hilo
+      ${APP_NAME}                 -> nombre de la aplicación (desde Spring)
+      %logger                     -> logger que emite (clase/paquete)
+      %X{correlationId:-na}       -> MDC: correlationId, 'na' si no existe
+      %X{email:-na}               -> MDC: email, 'na' si no existe
+      %msg%n                      -> mensaje y salto de línea
+    -->
+    <property name="LOG_PATTERN"
+              value="%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] ${APP_NAME} %logger - [cid:%X{correlationId:-na}] [email:%X{email:-na}] %msg%n"/>
+
+    <!--
+      Appender de consola: imprime los logs en STDOUT con el patrón definido.
+      Recomendada en desarrollo. En producción puede combinarse con un AsyncAppender.
+    -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>${LOG_PATTERN}</pattern>
+        </encoder>
+    </appender>
+
+    <!--
+      Silencia advertencias de JPA que no aplican en R2DBC (no usamos un proveedor JPA).
+      Cambia el nivel para 'jakarta.persistence.spi' a ERROR.
+    -->
+    <logger name="jakarta.persistence.spi" level="ERROR"/>
+
+    <!--
+      Configuración adicional solo para el perfil 'dev'.
+      Activa DEBUG detallado de R2DBC (consultas y parámetros).
+      No habilitar en producción por el volumen de logs y riesgo de exponer datos sensibles.
+    -->
+    <springProfile name="dev">
+        <logger name="io.r2dbc.postgresql.QUERY" level="DEBUG"/>
+        <logger name="io.r2dbc.postgresql.PARAM" level="DEBUG"/>
+        <logger name="org.springframework.r2dbc.core" level="DEBUG"/>
+    </springProfile>
+
+    <!--
+      Logger raíz (root): nivel INFO por defecto, enviando a consola.
+      se puede  cambiar a WARN/ERROR en prod para menos ruido.
+    -->
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+    </root>
+</configuration>
