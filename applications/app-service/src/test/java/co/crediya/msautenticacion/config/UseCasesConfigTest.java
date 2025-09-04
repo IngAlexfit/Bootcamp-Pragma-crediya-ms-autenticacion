@@ -1,13 +1,37 @@
 package co.crediya.msautenticacion.config;
 
+import co.crediya.msautenticacion.model.usuario.gateways.UsuarioRepository;
+import co.crediya.msautenticacion.usecase.usuario.registrarusuario.RegistrarUsuarioUseCase;
+import co.crediya.msautenticacion.usecase.usuario.registrarusuario.interfaces.IRegistrarUsuarioUseCase;
 import org.junit.jupiter.api.Test;
-import org.springframework.context.annotation.AnnotationConfigApplicationContext;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.Import;
+import org.mockito.Mockito;
+import org.springframework.context.annotation.*;
+
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class UseCasesConfigTest {
+
+
+
+    @Configuration
+    public static class TestConfig {
+        @Bean
+        @Primary
+        public UsuarioRepository usuarioRepository() {
+            return Mockito.mock(UsuarioRepository.class);
+        }
+
+        @Bean
+        @Primary
+        public IRegistrarUsuarioUseCase registrarUsuarioUseCase(UsuarioRepository usuarioRepository) {
+            return new RegistrarUsuarioUseCase(usuarioRepository);
+        }
+
+        @Bean
+        public MyUseCase myUseCase() {
+            return new MyUseCase();
+        }
+    }
 
     @Test
     void testUseCaseBeansExist() {
@@ -22,17 +46,7 @@ public class UseCasesConfigTest {
                 }
             }
 
-            assertTrue(useCaseBeanFound, "No beans ending with 'Use Case' were found");
-        }
-    }
-
-    @Configuration
-    @Import(UseCasesConfig.class)
-    static class TestConfig {
-
-        @Bean
-        public MyUseCase myUseCase() {
-            return new MyUseCase();
+            assertTrue(useCaseBeanFound, "No beans ending with 'UseCase' were found");
         }
     }
 

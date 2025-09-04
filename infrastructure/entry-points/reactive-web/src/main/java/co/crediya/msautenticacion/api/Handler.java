@@ -97,7 +97,7 @@ public class Handler {
          * Nota: el orden de los if importa; se manejan primero los casos más
          * específicos de 400.
          */
-        private Mono<ServerResponse> manejarError(Throwable e) {
+        Mono<ServerResponse> manejarError(Throwable e) {
                 // 1) Validación Bean Validation -> objeto estructurado con lista de errores
                 if (e instanceof jakarta.validation.ConstraintViolationException cve) {
                         var errors = new ArrayList<Map<String, Object>>();

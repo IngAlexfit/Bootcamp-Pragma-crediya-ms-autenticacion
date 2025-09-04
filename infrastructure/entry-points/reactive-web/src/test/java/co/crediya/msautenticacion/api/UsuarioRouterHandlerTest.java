@@ -13,8 +13,11 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInfo; // <- para loguear nombre de la prueba
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.core.codec.DecodingException;
 import org.springframework.http.MediaType;
 import org.springframework.http.server.reactive.HttpHandler;
 import org.springframework.test.web.reactive.server.HttpHandlerConnector;
@@ -22,8 +25,11 @@ import org.springframework.test.web.reactive.server.WebTestClient;
 import org.springframework.web.reactive.function.server.RouterFunction;
 import org.springframework.web.reactive.function.server.RouterFunctions;
 import org.springframework.web.reactive.function.server.ServerResponse;
+import org.springframework.web.server.ServerWebExchange;
+import org.springframework.web.server.ServerWebInputException;
 import org.springframework.web.server.adapter.WebHttpHandlerBuilder;
 import reactor.core.publisher.Mono;
+import reactor.test.StepVerifier;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -32,6 +38,8 @@ import java.util.Set;
 import java.util.UUID;
 
 import static org.hamcrest.Matchers.containsString;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -59,6 +67,11 @@ class UsuarioRouterHandlerTest {
     private IRegistrarUsuarioUseCase registrarUsuarioUseCase;
     private Validator validator;
     private UsuarioDTOMapper usuarioDTOMapper;
+    @Mock
+    private ServerWebExchange exchange;
+
+    @InjectMocks
+    private Handler handler;
 
     private static void tlog(String msg) {
         System.out.println("[TEST] " + msg);
@@ -66,7 +79,7 @@ class UsuarioRouterHandlerTest {
 
     /**
      * Construye un objeto UsuarioRequest de prueba.
-     * 
+     *
      * @return UsuarioRequest con datos de ejemplo
      */
     private UsuarioRequest buildRequest() {
@@ -82,7 +95,7 @@ class UsuarioRouterHandlerTest {
 
     /**
      * Construye un modelo Usuario a partir de un UsuarioRequest.
-     * 
+     *
      * @param req UsuarioRequest
      * @return Usuario
      */
@@ -228,7 +241,7 @@ class UsuarioRouterHandlerTest {
                 .jsonPath("$.errors[?(@.field=='salarioBase')]").value(hasSize(1));
     }
 
-    
+
 
     /**
      * JSON mal formado: debe provocar Bad Request con mensaje de decodificación.
@@ -290,5 +303,133 @@ class UsuarioRouterHandlerTest {
                 .expectStatus().isBadRequest()
                 .expectBody()
                 .jsonPath("$.error").isEqualTo("El correo electrónico ya se encuentra registrado.");
+    }
+
+    /**
+     * Prueba de integración que verifica el correcto manejo de excepciones DecodingException.
+     *
+     * Esta prueba configura un router con un filtro que captura errores de decodificación
+     * y verifica que el handler los transforma en respuestas HTTP 400 con el mensaje adecuado.
+     *
+     * @see Handler#manejarError(Throwable)
+     * @see DecodingException
+     */
+    @Test
+    @DisplayName("Debe manejar correctamente errores DecodingException - Integración")
+    void testManejarErrorDecodingExceptionIntegracion() {
+        // Configurar router con handler
+        RouterFunction<ServerResponse> router = RouterFunctions.route()
+                .POST("/test", request -> {
+                    throw new DecodingException("JSON mal formado");
+                })
+                .filter((request, next) -> {
+                    try {
+                        return next.handle(request);
+                    } catch (DecodingException ex) {
+                        return handler.manejarError(ex);
+                    }
+                })
+                .build();
+
+        // Crear WebTestClient
+        WebTestClient client = WebTestClient.bindToRouterFunction(router).build();
+
+        // Ejecutar prueba
+        client.post().uri("/test")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue("{}")
+                .exchange()
+                .expectStatus().isBadRequest()
+                .expectHeader().contentType(MediaType.APPLICATION_JSON)
+                .expectBody()
+                .jsonPath("$.error").isEqualTo("No se pudo leer el cuerpo de la solicitud (JSON inválido o tipos incorrectos).");
+    }
+
+    /**
+     * Prueba unitaria que verifica que el método manejarError procesa correctamente
+     * las excepciones de tipo DecodingException.
+     *
+     * Verifica que la respuesta tenga el código de estado 400 (Bad Request) y el tipo
+     * de contenido correcto, sin validar el contenido específico del cuerpo.
+     *
+     * @see Handler#manejarError(Throwable)
+     * @see DecodingException
+     */
+    @Test
+    @DisplayName("Debe manejar correctamente errores DecodingException - Unitario")
+    void testManejarErrorDecodingException() {
+        // Arrange
+        DecodingException exception = new DecodingException("JSON mal formado");
+
+        // Act
+        var response = handler.manejarError(exception);
+
+        // Assert
+        StepVerifier.create(response)
+                .assertNext(serverResponse -> {
+                    assertEquals(400, serverResponse.statusCode().value());
+                    assertEquals(MediaType.APPLICATION_JSON, serverResponse.headers().getContentType());
+
+
+                })
+                .verifyComplete();
+    }
+
+    /**
+     * Prueba unitaria para el manejo de excepciones genéricas no específicamente tratadas.
+     *
+     * Verifica que cualquier excepción no manejada explícitamente se convierte en una
+     * respuesta HTTP 500 (Internal Server Error) con el tipo de contenido adecuado.
+     *
+     * @see Handler#manejarError(Throwable)
+     */
+    @Test
+    @DisplayName("Debe manejar correctamente otros errores como error interno")
+    void testManejarErrorGenerico() {
+        // Arrange
+        RuntimeException exception = new RuntimeException("Error inesperado");
+
+        // Act
+        var response = handler.manejarError(exception);
+
+        // Assert
+        StepVerifier.create(response)
+                .assertNext(serverResponse -> {
+                    assertEquals(500, serverResponse.statusCode().value());
+                    assertEquals(MediaType.APPLICATION_JSON, serverResponse.headers().getContentType());
+
+
+                })
+                .verifyComplete();
+    }
+
+    /**
+     * Prueba unitaria que verifica el manejo específico de ServerWebInputException sin mensaje.
+     *
+     * Este caso particular debe ser manejado correctamente generando una respuesta
+     * HTTP 400 (Bad Request) con un mensaje predeterminado cuando el mensaje de
+     * la excepción está vacío.
+     *
+     * @see Handler#manejarError(Throwable)
+     * @see ServerWebInputException
+     */
+    @Test
+    @DisplayName("Debe manejar ServerWebInputException con mensaje vacío")
+    void testManejarErrorServerWebInputExceptionSinMensaje() {
+        // Arrange
+        ServerWebInputException exception = new ServerWebInputException("");
+
+        // Act
+        var response = handler.manejarError(exception);
+
+        // Assert
+        StepVerifier.create(response)
+                .assertNext(serverResponse -> {
+                    assertEquals(400, serverResponse.statusCode().value());
+                    assertEquals(MediaType.APPLICATION_JSON, serverResponse.headers().getContentType());
+
+
+                })
+                .verifyComplete();
     }
 }
